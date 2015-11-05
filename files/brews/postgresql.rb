@@ -1,24 +1,30 @@
 class Postgresql < Formula
-  homepage "http://www.postgresql.org/"
+  desc "Object-relational database system"
+  homepage "https://www.postgresql.org/"
+   version "9.4.5-boxen2"
 
   stable do
-    url "http://ftp.postgresql.org/pub/source/v9.4.1/postgresql-9.4.1.tar.bz2"
-    sha256 "29ddb77c820095b8f52e5455e9c6c6c20cf979b0834ed1986a8857b84888c3a6"
+    url "https://ftp.postgresql.org/pub/source/v9.4.5/postgresql-9.4.5.tar.bz2"
+    sha256 "b87c50c66b6ea42a9712b5f6284794fabad0616e6ae420cf0f10523be6d94a39"
   end
 
-  version "9.4.1-boxen2"
+  devel do
+    url "https://ftp.postgresql.org/pub/source/v9.5beta1/postgresql-9.5beta1.tar.bz2"
+    sha256 "b53199e2667982de2039ad7e30467f67c5d7af678e69d6211de8ba1cac75c9f0"
+    version "9.5beta1"
+  end
 
   bottle do
-    revision 1
-    sha1 "4b5a1f7ebe10ec5aba088459a4faa2ba7c13a691" => :yosemite
-    sha1 "e7844fc53d1ffef1cb809332d88b5bb777927176" => :mavericks
-    sha1 "a5e70e04dba89fee99bb5fb7dae74e4a849813c4" => :mountain_lion
+    sha256 "57294da21442db822bf719143880000c9a90656188dcf580fafcb6b4e4350f9e" => :el_capitan
+    sha256 "02a136458ee09cc7fdb731c023948359dafa5665b56179744985864492adacd4" => :yosemite
+    sha256 "13f6fec00aa8b4938a2858bdcda390460d21bb71d16fc0827bf8446071c60f47" => :mavericks
   end
 
   option "32-bit"
   option "without-perl", "Build without Perl support"
   option "without-tcl", "Build without Tcl support"
   option "with-dtrace", "Build with DTrace support"
+  option "with-pgroonga", "Build with the PGroonga postgresql extension"
 
   deprecated_option "no-perl" => "without-perl"
   deprecated_option "no-tcl" => "without-tcl"
@@ -28,6 +34,16 @@ class Postgresql < Formula
   depends_on "readline"
   depends_on "libxml2" if MacOS.version <= :leopard # Leopard libxml is too old
   depends_on :python => :optional
+
+  if build.with? "pgroonga"
+    depends_on "groonga" => :build
+    depends_on "pkg-config" => :build
+  end
+
+  resource "pgroonga" do
+    url "http://packages.groonga.org/source/pgroonga/pgroonga-1.0.0.tar.gz"
+    sha256 "854d66bdc79e7cfceb29ae8706556a3ad1c8b32ac4535939d296966e3b19fd3e"
+  end
 
   conflicts_with "postgres-xc",
     :because => "postgresql and postgres-xc install the same binaries."
@@ -39,6 +55,9 @@ class Postgresql < Formula
 
   def install
     ENV.libxml2 if MacOS.version >= :snow_leopard
+
+    ENV.prepend "LDFLAGS", "-L#{Formula["openssl"].opt_lib}"
+    ENV.prepend "CPPLAGS", "-I#{Formula["openssl"].opt_include}"
 
     args = %W[
       --disable-debug
@@ -58,7 +77,7 @@ class Postgresql < Formula
     args << "--with-python" if build.with? "python"
     args << "--with-perl" if build.with? "perl"
 
-    # The CLT is required to build tcl support on 10.7 and 10.8 because
+    # The CLT is required to build Tcl support on 10.7 and 10.8 because
     # tclConfig.sh is not part of the SDK
     if build.with?("tcl") && (MacOS.version >= :mavericks || MacOS::CLT.installed?)
       args << "--with-tcl"
@@ -72,11 +91,19 @@ class Postgresql < Formula
     args << "--with-uuid=e2fs"
 
     if build.build_32_bit?
-      ENV.append %w{CFLAGS LDFLAGS}, "-arch #{Hardware::CPU.arch_32_bit}"
+      ENV.append %w[CFLAGS LDFLAGS], "-arch #{Hardware::CPU.arch_32_bit}"
     end
 
     system "./configure", *args
     system "make", "install-world"
+
+    if build.with? "pgroonga"
+      resource("pgroonga").stage do
+        ENV.append_path "PATH", bin
+        system "make"
+        system "make", "install"
+      end
+    end
   end
 
   def post_install
@@ -91,7 +118,7 @@ class Postgresql < Formula
       https://github.com/Homebrew/homebrew/issues/2510
 
     To migrate existing data from a previous major version (pre-9.4) of PostgreSQL, see:
-      http://www.postgresql.org/docs/9.4/static/upgrading.html
+      https://www.postgresql.org/docs/9.4/static/upgrading.html
     EOS
   end
 
